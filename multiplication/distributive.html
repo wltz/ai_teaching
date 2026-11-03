@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splitting a multiplication (distributive property)</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --ink: #2b2b2b; --muted: #6b6b6b; --card: #fff; --line: #d9d4c7;
+    --accent: #2f6fde; --bad: #c0392b; --whole: #2f6fde;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  nav { font-size: .9rem; margin-bottom: 12px; }
+  nav a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .rule {
+    display: inline-block; font-size: 1.15rem; font-weight: 700; background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; margin-bottom: 16px;
+  }
+
+  .controls {
+    display: flex; flex-direction: column; gap: 12px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+  }
+  .ask { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .ask label { font-weight: 600; }
+  .ask input {
+    font: inherit; font-size: 1.4rem; font-weight: 700; width: 11em;
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px;
+  }
+  .ask input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .error { color: var(--bad); min-height: 1.2em; font-size: .95rem; }
+  .row2 { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; font-size: .85rem; color: var(--muted); }
+  .presets, .splitmode { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button {
+    font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .presets button, .splitmode button { padding: 4px 10px; }
+  .toggle { display: inline-flex; }
+  .toggle button { border-radius: 0; }
+  .toggle button:first-child { border-radius: 8px 0 0 8px; }
+  .toggle button:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .toggle button[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: #fff; }
+  [hidden] { display: none !important; }
+
+  .stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 20px 0 12px; }
+  .dots { display: flex; gap: 6px; margin: 0 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .dot.on { background: var(--ink); }
+
+  .say { font-size: 1.05rem; line-height: 1.5; margin: 0 0 12px; min-height: 3em; }
+  .say b, .equation b { font-weight: 700; }
+  .equation { font-size: clamp(1.05rem, 2.4vw, 1.4rem); font-weight: 700; line-height: 1.55; margin-bottom: 16px; }
+  .equation div { transition: opacity .4s; }
+  .equation div.hidden { opacity: 0; }
+  .scale-note { font-size: .85rem; color: var(--muted); margin: 6px 0 0; }
+
+  /* The figure is a CSS grid whose tracks are set from JS:
+     columns = row labels | part | cut | part | ... | row sums
+     rows    = column labels | part | cut | part | ...
+     The "cut" tracks grow from 0 when the pieces are pulled apart. */
+  .figure {
+    display: grid; justify-content: start; align-items: stretch; overflow-x: auto; padding: 2px 2px 6px;
+    transition: grid-template-columns .6s ease, grid-template-rows .6s ease;
+  }
+  .piece {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    background-color: var(--pc); border-radius: 0; transition: background-color .5s, border-radius .5s;
+  }
+  .figure.step-0 .piece { background-color: var(--whole); }
+  .figure.step-1 .piece { outline: 2px dashed rgba(0,0,0,.6); outline-offset: -1px; }
+  .figure.apart .piece { border-radius: 6px; }
+  .piece .txt {
+    background: rgba(255,255,255,.9); border-radius: 6px; padding: 2px 6px; text-align: center;
+    font-size: var(--txt); font-weight: 700; line-height: 1.2; white-space: nowrap;
+    transition: opacity .4s;
+  }
+  .figure:not(.apart) .piece .txt { opacity: 0; }
+
+  /* Brackets: over each column part (or the whole width), and beside each row part. */
+  .top {
+    align-self: end; text-align: center; font-weight: 700; white-space: nowrap;
+    padding-bottom: 10px; position: relative; transition: opacity .4s;
+  }
+  .top::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 3px; height: 6px;
+    border: 2px solid currentColor; border-bottom: none; border-radius: 3px 3px 0 0;
+  }
+  .left {
+    display: flex; align-items: center; justify-content: flex-end; font-weight: 700; white-space: nowrap;
+    padding-right: 12px; position: relative; transition: opacity .4s;
+  }
+  .left::after {
+    content: ""; position: absolute; top: 0; bottom: 0; right: 3px; width: 6px;
+    border: 2px solid currentColor; border-right: none; border-radius: 3px 0 0 3px;
+  }
+  .figure.step-0 .part, .figure:not(.step-0) .whole:not(.single) { opacity: 0; }
+
+  .rowsum {
+    display: flex; align-items: center; padding-left: 14px; font-weight: 700; white-space: nowrap;
+    transition: opacity .4s;
+  }
+  .figure:not(.step-4) .rowsum { opacity: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .figure, .piece, .piece .txt, .top, .left, .rowsum, .equation div { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="index.html">← Multiplication as groups</a></nav>
+  <h1>Splitting a multiplication into easier pieces</h1>
+  <p class="sub">This is called the <b>distributive property</b>. Split the numbers into parts, multiply each pair of parts, and add.</p>
+  <div class="rule">(a + b) × (c + d) = a × c + a × d + b × c + b × d</div>
+
+  <section class="controls" aria-label="Controls">
+    <form class="ask" id="ask">
+      <label for="q">Your question:</label>
+      <input id="q" value="25 x 125" autocomplete="off" spellcheck="false" aria-describedby="error">
+      <button class="primary" type="submit">Explain</button>
+    </form>
+    <div class="error" id="error" role="alert"></div>
+    <div class="row2">
+      <div class="splitmode" id="splitmode" hidden>
+        Split as:
+        <span class="toggle" role="group" aria-label="How to split">
+          <button type="button" id="modeTens" aria-pressed="true"></button>
+          <button type="button" id="modePlace" aria-pressed="false"></button>
+        </span>
+      </div>
+      <div class="presets">
+        Try:
+        <button type="button" data-q="6 x 125">6 × 125</button>
+        <button type="button" data-q="25 x 125">25 × 125</button>
+        <button type="button" data-q="13 x 47">13 × 47</button>
+        <button type="button" data-q="5 x 23">5 × 23</button>
+        <button type="button" data-q="6 x 8">6 × 8</button>
+        <button type="button" data-q="25 x (100 + 25)">25 × (100 + 25)</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="stepper">
+    <button id="back">← Back</button>
+    <button id="next">Next →</button>
+    <button class="primary" id="play">Play all steps</button>
+    <span class="dots" id="dots" aria-hidden="true"></span>
+  </div>
+  <p class="say" id="say" aria-live="polite"></p>
+  <div class="equation" id="equation" aria-live="polite"></div>
+  <section class="figure step-0" id="figure" aria-label="Picture of the rectangle"></section>
+  <p class="scale-note" id="scaleNote" hidden>Small parts are drawn bigger than their true size so the labels fit.</p>
+</main>
+
+<script>
+const MAX_VALUE = 999;
+const MAX_PARTS = 10;   // per number
+const STEPS = 5;
+const STEP_MS = 2400;   // time per step when playing
+const CUT = 14;         // px between pieces once pulled apart
+const MAX_HEIGHT = 440; // px for the rectangle
+// Column parts: hundreds / tens / ones get fixed colors when split by place value.
+const COLORS = ['#2f6fde', '#29a35a', '#e8892b', '#8e5cd9', '#d94f8c',
+                '#17a2b8', '#c97b3a', '#4b5bab', '#7a8c2e', '#e4572e'];
+const ROW_COLORS = ['#6a3fb5', '#b8326b', '#0f7c8c', '#7a5c00', '#3d5a80',
+                    '#a14a1a', '#2d6a4f', '#7b2cbf', '#9d0208', '#495057'];
+
+const $ = id => document.getElementById(id);
+const num = n => n.toLocaleString('en-US');
+const sum = xs => xs.reduce((s, x) => s + x, 0);
+
+// rows / cols: { value, parts, custom, kind } where kind is how it was split:
+// 'place' (100 + 20 + 5), 'tens' (10 + 10 + 3), 'five' (5 + 3), 'custom' or 'none'.
+const state = { rows: null, cols: null, mode: 'tens', note: '', step: 0, timers: [] };
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+function clearTimers() {
+  state.timers.forEach(clearTimeout);
+  state.timers = [];
+}
+
+// ---- Splitting ----
+
+function placeSplit(v) {
+  return [Math.floor(v / 100) * 100, Math.floor(v / 10) % 10 * 10, v % 10].filter(p => p > 0);
+}
+
+function tensSplit(v) {
+  const parts = Array(Math.floor(v / 10)).fill(10);
+  if (v % 10) parts.push(v % 10);
+  return parts;
+}
+
+// "Split 23 as 10 + 10 + 3" is offered only for a 2-digit number times a 1-digit number.
+function tensModeAllowed() {
+  const { rows, cols } = state;
+  return !rows.custom && rows.value < 10 && !cols.custom && cols.value >= 20 && cols.value <= 99;
+}
+
+function autoSplit() {
+  const { rows, cols } = state;
+  if (!cols.custom) {
+    const v = cols.value;
+    if (v >= 10 && state.mode === 'tens' && tensModeAllowed()) Object.assign(cols, { parts: tensSplit(v), kind: 'tens' });
+    else if (v >= 10) Object.assign(cols, { parts: placeSplit(v), kind: 'place' });
+    else if (rows.value < 10 && v >= 2) Object.assign(cols, { parts: v >= 6 ? [5, v - 5] : [Math.ceil(v / 2), Math.floor(v / 2)], kind: 'five' });
+    else Object.assign(cols, { parts: [v], kind: 'none' });
+  }
+  if (!rows.custom) {
+    const v = rows.value;
+    Object.assign(rows, v >= 10 ? { parts: placeSplit(v), kind: 'place' } : { parts: [v], kind: 'none' });
+  }
+}
+
+// Parse one side: "125" or "(100 + 25)".
+function parseFactor(s) {
+  if (s.startsWith('(')) {
+    const parts = s.slice(1, -1).split('+').map(Number);
+    return { value: sum(parts), parts, custom: true, kind: 'custom' };
+  }
+  return { value: +s, parts: null, custom: false };
+}
+
+// Parse "25 x 125", "25*125", "25 × (100 + 25)", "(20 + 5) x (100 + 25)".
+function parseQuestion(text) {
+  const t = text.replace(/\s+/g, '').replace(/[×*X]/g, 'x');
+  if (!t) return { error: 'Type a question like 25 x 125.' };
+  const F = '(\\d+|\\(\\d+(?:\\+\\d+)+\\))';
+  const m = t.match(new RegExp(`^${F}x${F}$`));
+  if (!m) return { error: 'I didn\'t understand that. Try something like 25 x 125 or 6 x (100 + 25).' };
+
+  let rows = parseFactor(m[1]), cols = parseFactor(m[2]), note = '';
+  for (const f of [rows, cols]) {
+    if (f.custom && f.parts.some(p => p === 0)) return { error: 'Each part of a split should be at least 1.' };
+    if (f.custom && f.parts.length > MAX_PARTS) return { error: `Please use at most ${MAX_PARTS} parts.` };
+    if (f.value === 0) return { error: 'Anything times 0 is 0, so there is nothing to split. Try numbers bigger than 0.' };
+    if (f.value > MAX_VALUE) return { error: `That's too big to draw. Keep each number at ${MAX_VALUE} or less.` };
+  }
+  // The smaller number goes down the side, the bigger one across the top.
+  if (rows.value > cols.value) {
+    note = `${num(rows.value)} × ${num(cols.value)} is the same as ${num(cols.value)} × ${num(rows.value)}. `;
+    [rows, cols] = [cols, rows];
+  }
+  return { rows, cols, note };
+}
+
+// ---- Colors and text helpers ----
+
+function colColor(j) {
+  const { cols } = state;
+  if (cols.kind === 'place') {
+    const p = cols.parts[j];
+    return COLORS[p >= 100 ? 0 : p >= 10 ? 1 : 2];
+  }
+  return COLORS[j % COLORS.length];
+}
+const rowColor = i => state.rows.parts.length > 1 ? ROW_COLORS[i % ROW_COLORS.length] : 'var(--ink)';
+const pieceColor = (i, j) => `color-mix(in srgb, ${colColor(j)} ${100 - 25 * (i % 3)}%, white)`;
+const R = (i, x) => `<b style="color:${rowColor(i)}">${num(x)}</b>`;
+const Cc = (j, x) => `<b style="color:${colColor(j)}">${num(x)}</b>`;
+
+function factorText(f, color) {
+  const parts = f.parts.map((p, i) => color(i, p));
+  return parts.length > 1 ? `(${parts.join(' + ')})` : parts[0];
+}
+
+function listWithAnd(items) {
+  return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+}
+
+// All pieces as [i, j, rowPart, colPart].
+function pieces() {
+  const out = [];
+  state.rows.parts.forEach((r, i) => state.cols.parts.forEach((c, j) => out.push([i, j, r, c])));
+  return out;
+}
+
+const rowSums = () => state.rows.parts.map(r => r * state.cols.value);
+
+// ---- Drawing ----
+
+// Sizes in px for each part. Everything is to scale, except that small parts get a minimum
+// size so their labels fit. Returns { w: [...], h: [...], distorted, small }.
+function sizing() {
+  const rows = state.rows.parts, cols = state.cols.parts;
+  const twoD = rows.length > 1;
+  const minW = cols.length > 6 ? 62 : 82, minH = twoD ? 50 : 46;
+  const avail = Math.min($('figure').parentElement.clientWidth - 32, 948);
+  const maxW = avail - 70 - (twoD ? 90 : 0) - (cols.length - 1) * CUT;
+  const maxH = MAX_HEIGHT - (rows.length - 1) * CUT;
+
+  let s = Math.min(maxW / sum(cols), maxH / sum(rows));
+  for (let iter = 0; iter < 5; iter++) {
+    const fixedW = sum(cols.filter(p => p * s < minW).map(() => minW));
+    const freeW = sum(cols.filter(p => p * s >= minW));
+    const fixedH = sum(rows.filter(p => p * s < minH).map(() => minH));
+    const freeH = sum(rows.filter(p => p * s >= minH));
+    const sW = freeW ? (maxW - fixedW) / freeW : s;
+    const sH = freeH ? (maxH - fixedH) / freeH : s;
+    const next = Math.min(s, sW, sH);
+    if (next >= s - 1e-6 || next <= 0) break;
+    s = next;
+  }
+  const w = cols.map(p => Math.round(Math.max(minW, p * s)));
+  const h = rows.map(p => Math.round(Math.max(minH, p * s)));
+  const distorted = cols.some(p => p * s < minW * 0.7) || rows.some(p => p * s < minH * 0.7);
+  return { w, h, distorted, small: minW < 80 };
+}
+
+// Faint lines that show the unit squares (or every 10 or 100 units when squares would be too small).
+// Lines closer than a few px blur into a moire pattern, so those are skipped.
+function unitGrid(px, units) {
+  for (const [step, minPx] of [[1, 5], [10, 8], [100, 8]]) {
+    if (units % step === 0 && px / units * step >= minPx) return px / units * step;
+  }
+  return 0;
+}
+
+function gridTracks(sizes, cut, before, after) {
+  const tracks = [before];
+  sizes.forEach((s, i) => { if (i) tracks.push(cut + 'px'); tracks.push(s + 'px'); });
+  if (after) tracks.push(after);
+  return tracks.join(' ');
+}
+
+function buildFigure() {
+  const { rows, cols } = state;
+  const fig = $('figure');
+  const s = sizing();
+  state.sizes = s;
+  state.fresh = true;
+  fig.replaceChildren();
+  fig.style.setProperty('--txt', s.small ? '.75rem' : '.85rem');
+  $('scaleNote').hidden = !s.distorted;
+
+  const twoD = rows.parts.length > 1;
+  const lastCol = 2 * cols.parts.length;  // grid column of the last part
+  const lastRow = 2 * rows.parts.length;
+
+  const whole = el('div', 'top whole', num(cols.value));
+  whole.style.gridArea = `1 / 2 / 2 / ${lastCol + 1}`;
+  // With a single row, the side label never changes, so it stays visible at every step.
+  const wholeLeft = el('div', 'left whole' + (twoD ? '' : ' single'), num(rows.value));
+  wholeLeft.style.gridArea = `2 / 1 / ${lastRow + 1} / 2`;
+  fig.append(whole, wholeLeft);
+
+  cols.parts.forEach((c, j) => {
+    const t = el('div', 'top part', num(c));
+    t.style.gridArea = `1 / ${2 + 2 * j}`;
+    t.style.color = colColor(j);
+    fig.append(t);
+  });
+  if (twoD) {
+    rows.parts.forEach((r, i) => {
+      const l = el('div', 'left part', num(r));
+      l.style.gridArea = `${2 + 2 * i} / 1`;
+      l.style.color = rowColor(i);
+      const rs = el('div', 'rowsum', `= ${num(r * cols.value)}`);
+      rs.style.gridArea = `${2 + 2 * i} / ${lastCol + 1}`;
+      rs.style.color = rowColor(i);
+      fig.append(l, rs);
+    });
+  }
+
+  state.pieceEls = [];
+  for (const [i, j, r, c] of pieces()) {
+    const p = el('div', 'piece');
+    p.style.gridArea = `${2 + 2 * i} / ${2 + 2 * j}`;
+    p.style.setProperty('--pc', pieceColor(i, j));
+    const gx = unitGrid(s.w[j], c), gy = unitGrid(s.h[i], r);
+    const line = 'rgba(255,255,255,.45)';
+    const imgs = [], sizes = [];
+    if (gx) { imgs.push(`linear-gradient(to right, ${line} 1px, transparent 1px)`); sizes.push(`${gx}px 100%`); }
+    if (gy) { imgs.push(`linear-gradient(to bottom, ${line} 1px, transparent 1px)`); sizes.push(`100% ${gy}px`); }
+    p.style.backgroundImage = imgs.join(', ');
+    p.style.backgroundSize = sizes.join(', ');
+    const txt = el('div', 'txt');
+    p.append(txt);
+    fig.append(p);
+    state.pieceEls.push([txt, i, j, r, c]);
+  }
+}
+
+function layoutFigure() {
+  const fig = $('figure');
+  const { w, h } = state.sizes;
+  const cut = state.step >= 2 ? CUT : 0;
+  const twoD = state.rows.parts.length > 1;
+  // A new problem snaps to its shape; only step changes (pulling apart) are animated.
+  if (state.fresh) fig.style.transition = 'none';
+  fig.style.gridTemplateColumns = gridTracks(w, cut, 'auto', twoD ? 'auto' : '');
+  fig.style.gridTemplateRows = gridTracks(h, cut, 'auto', '');
+  if (state.fresh) {
+    fig.offsetWidth;  // apply the new tracks before turning transitions back on
+    fig.style.transition = '';
+    state.fresh = false;
+  }
+  fig.className = `figure step-${state.step}` + (state.step >= 2 ? ' apart' : '');
+  for (const [txt, i, j, r, c] of state.pieceEls) {
+    txt.innerHTML = `${R(i, r)} × ${Cc(j, c)}` + (state.step >= 3 ? `<br>= ${num(r * c)}` : '');
+  }
+}
+
+// ---- Explanations ----
+
+const trailingZeros = x => { let z = 0; while (x % 10 === 0) { x /= 10; z++; } return z; };
+
+// "Tip: for 20 × 100, multiply 2 × 1 = 2, then add 3 zeros: 2,000."
+function zerosTip() {
+  let best = null;
+  for (const [, , r, c] of pieces()) {
+    const z = trailingZeros(r) + trailingZeros(c);
+    if (z && (!best || z > best.z)) best = { r, c, z };
+  }
+  if (!best) return '';
+  const { r, c, z } = best;
+  const dr = r / 10 ** trailingZeros(r), dc = c / 10 ** trailingZeros(c);
+  return ` Tip: for ${num(r)} × ${num(c)}, multiply ${dr} × ${dc} = ${dr * dc}, then add ${z} zero${z > 1 ? 's' : ''}: ${num(r * c)}.`;
+}
+
+// "20 × 100 = 2,000, 20 × 20 = 400 and ...", grouping repeated pieces.
+function pieceList() {
+  const seen = [];
+  for (const [i, j, r, c] of pieces()) {
+    const s = seen.find(x => x.r === r && x.c === c);
+    if (s) s.count++; else seen.push({ i, j, r, c, count: 1 });
+  }
+  return listWithAnd(seen.map(({ i, j, r, c, count }) =>
+    `${R(i, r)} × ${Cc(j, c)} = ${num(r * c)}` + (count > 1 ? ` (${count} times)` : '')));
+}
+
+function finalHint() {
+  const { rows, cols } = state;
+  const a = rows.value, n = cols.value;
+  if (rows.parts.length > 1) {
+    const lines = rows.parts.map((r, i) => `${R(i, r * n)} is ${R(i, r)} × ${num(n)}`);
+    return ` This is exactly what long multiplication does: ${listWithAnd(lines)}. Those are the lines you write before adding.`;
+  }
+  if (cols.kind === 'tens' && cols.parts.length > 2) {
+    const tens = Math.floor(n / 10), ones = n % 10;
+    return ` Notice that ${Array(tens).fill(num(a * 10)).join(' + ')} = ${a} × ${tens * 10}, so you could also split ${n} as ` +
+           `${tens * 10}${ones ? ' + ' + ones : ''}. Try the "${tens * 10}${ones ? ' + ' + ones : ''}" button above.`;
+  }
+  if (cols.kind === 'place' && cols.parts.length > 1) return ' Splitting by place value lets you multiply one digit at a time.';
+  if (cols.kind === 'five') return ` Multiplying by 5 is easy: ${a} × 5 is half of ${a} × 10.`;
+  return '';
+}
+
+function splitSentence() {
+  const { rows, cols } = state;
+  const say = f => {
+    const what = f.kind === 'place' && f.parts.length === 3 ? ' (hundreds, tens and ones)'
+               : f.kind === 'place' ? ' (by place value)' : '';
+    return `${num(f.value)} into ${f.parts.map((p, i) => (f === rows ? R : Cc)(i, p)).join(' + ')}${what}`;
+  };
+  const split = [rows, cols].filter(f => f.parts.length > 1).map(say);
+  return `Split ${split.join(' and ')}. The lines only divide the rectangle; nothing is added or taken away.`;
+}
+
+function render() {
+  const { rows, cols, step } = state;
+  const a = rows.value, n = cols.value, total = a * n;
+  const twoD = rows.parts.length > 1;
+  const k = rows.parts.length * cols.parts.length;
+  layoutFigure();
+
+  const products = pieces().map(([i, j, r, c]) => `<b style="color:${colColor(j)}">${num(r * c)}</b>`);
+  const lines = [
+    `${num(a)} × ${num(n)}`,
+    `= ${factorText(rows, R)} × ${factorText(cols, Cc)}`,
+    `= ${pieces().map(([i, j, r, c]) => `${R(i, r)} × ${Cc(j, c)}`).join(' + ')}`,
+    `= ${products.join(' + ')}`,
+    twoD ? `= ${rowSums().map((x, i) => R(i, x)).join(' + ')} = ${num(total)}` : `= ${num(total)}`,
+  ];
+  $('equation').replaceChildren(...lines.map((l, i) => el('div', i > step ? 'hidden' : '', l)));
+
+  const says = [
+    `${state.note}This rectangle is ${num(a)} squares tall and ${num(n)} squares wide, so it holds ${num(a)} × ${num(n)} squares. ` +
+      `Counting all ${num(total)} of them one by one would take a long time.`,
+    splitSentence(),
+    `Pull the pieces apart. Now there are ${k} smaller rectangles, one for each ${twoD ? 'pair of parts' : 'part'}.`,
+    `Each piece is easy: ${pieceList()}.` + zerosTip(),
+    twoD
+      ? `Add each row: ${rows.parts.map((r, i) => `the ${R(i, r)} row makes ${cols.parts.map(c => num(r * c)).join(' + ')} = ${R(i, r * n)}`).join('; ')}. ` +
+        `Then add the rows: ${rowSums().map((x, i) => R(i, x)).join(' + ')} = ${num(total)}.` + finalHint()
+      : `Add them up: ${products.join(' + ')} = ${num(total)}, the same as ${num(a)} × ${num(n)}.` + finalHint(),
+  ];
+  $('say').innerHTML = says[step];
+
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('on', i <= step));
+  $('back').disabled = step === 0;
+  $('next').disabled = step === STEPS - 1;
+}
+
+function go(step) {
+  state.step = Math.max(0, Math.min(STEPS - 1, step));
+  render();
+}
+
+function play() {
+  clearTimers();
+  go(0);
+  for (let i = 1; i < STEPS; i++) state.timers.push(setTimeout(() => go(i), i * STEP_MS));
+}
+
+// Show the "Split as: 10 + 10 + 3 | 20 + 3" toggle only where it applies.
+function updateSplitMode() {
+  const show = tensModeAllowed();
+  $('splitmode').hidden = !show;
+  if (!show) return;
+  const v = state.cols.value;
+  $('modeTens').textContent = tensSplit(v).join(' + ');
+  $('modePlace').textContent = placeSplit(v).join(' + ');
+  $('modeTens').setAttribute('aria-pressed', state.mode === 'tens');
+  $('modePlace').setAttribute('aria-pressed', state.mode === 'place');
+}
+
+function setupProblem() {
+  autoSplit();
+  updateSplitMode();
+  buildFigure();
+  render();
+}
+
+function explain(text, autoplay = true) {
+  const r = parseQuestion(text);
+  if (r.error) {
+    $('error').textContent = r.error;
+    return;
+  }
+  const saved = { rows: state.rows, cols: state.cols, note: state.note };
+  Object.assign(state, r);
+  autoSplit();
+  if (state.rows.parts.length * state.cols.parts.length === 1) {
+    $('error').textContent = `${num(r.rows.value)} × ${num(r.cols.value)} = ${num(r.rows.value * r.cols.value)} is already easy, ` +
+      'so there is nothing to split. Try a number with more digits, like 6 x 125.';
+    Object.assign(state, saved);
+    return;
+  }
+  $('error').textContent = '';
+  history.replaceState(null, '', '#' + encodeURIComponent(text.trim()));
+  setupProblem();
+  if (autoplay) play(); else { clearTimers(); go(0); }
+}
+
+$('dots').append(...Array.from({ length: STEPS }, () => el('span', 'dot')));
+$('ask').addEventListener('submit', e => { e.preventDefault(); explain($('q').value); });
+document.querySelectorAll('[data-q]').forEach(btn => btn.addEventListener('click', () => {
+  $('q').value = btn.dataset.q;
+  explain(btn.dataset.q);
+}));
+for (const [id, mode] of [['modeTens', 'tens'], ['modePlace', 'place']]) {
+  $(id).addEventListener('click', () => {
+    if (state.mode === mode) return;
+    state.mode = mode;
+    setupProblem();
+    play();
+  });
+}
+$('back').addEventListener('click', () => { clearTimers(); go(state.step - 1); });
+$('next').addEventListener('click', () => { clearTimers(); go(state.step + 1); });
+$('play').addEventListener('click', play);
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (state.rows) { buildFigure(); render(); } }, 150);
+});
+
+// Start with the question from the URL (e.g. distributive.html#25%20x%20125), if any.
+const fromUrl = decodeURIComponent(location.hash.slice(1));
+if (fromUrl) $('q').value = fromUrl;
+explain($('q').value, false);
+if (!state.rows) explain('25 x 125', false);  // the URL question was invalid
+</script>
+</body>
+</html>

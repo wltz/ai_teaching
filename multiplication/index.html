@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multiplication as groups</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --ink: #2b2b2b; --muted: #6b6b6b; --card: #fff; --line: #d9d4c7;
+    --accent: #2f6fde;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  nav { font-size: .9rem; margin-bottom: 12px; }
+  nav a { color: var(--accent); }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: flex-end;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+  }
+  .control label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  .control .row { display: flex; align-items: center; gap: 10px; }
+  .control input[type=range] { width: 150px; accent-color: var(--accent); }
+  .control input[type=number] {
+    width: 4.2em; font: inherit; font-size: 1.3rem; font-weight: 700; text-align: center;
+    padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); cursor: pointer;
+  }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .toggle { display: inline-flex; }
+  .toggle button { border-radius: 0; }
+  .toggle button:first-child { border-radius: 8px 0 0 8px; }
+  .toggle button:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .toggle button[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+  .equation { font-size: clamp(1.4rem, 4vw, 2.2rem); font-weight: 700; margin: 24px 0 6px; min-height: 1.4em; }
+  .equation .sum { color: var(--muted); font-weight: 600; }
+  .equation small { font-size: .55em; font-weight: 600; color: var(--muted); }
+  .say { color: var(--muted); font-size: 1.05rem; margin: 0 0 18px; min-height: 1.4em; }
+
+  /* --sq (square size), --gap, --r (corner radius) and --ten (extra gap every 10) are set from JS. */
+  .stage { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; min-height: 100px; overflow-x: auto; }
+  .stage.rows { flex-direction: column; gap: var(--gap); flex-wrap: nowrap; }
+  .empty { color: var(--muted); font-style: italic; padding: 24px 0; }
+
+  /* Groups view: each group is a dashed box. */
+  .group {
+    background: var(--card); border: 2px dashed var(--line); border-radius: 12px;
+    padding: 8px 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .group .squares { display: grid; gap: var(--gap); }
+
+  /* Rows view: each group is one row of the rectangle. */
+  .grow { display: flex; align-items: center; gap: 12px; }
+  .grow .label { width: 68px; text-align: right; flex: none; }
+  .grow .squares { display: flex; gap: var(--gap); flex: none; }
+  .grow .squares.tens .sq:nth-child(10n):not(:last-child) { margin-right: var(--ten); }
+  .grow.ten-end { margin-bottom: var(--ten); }
+  /* With many thin rows, only some rows are labelled and labels may overhang the row. */
+  .stage.sparse { padding: 8px 0; }
+  .stage.sparse .grow { height: var(--sq); }
+  .stage.sparse .label, .stage.sparse .total { line-height: 1; white-space: nowrap; font-size: .75rem; }
+  @media (max-width: 520px) { .grow .label { width: 52px; } }
+
+  .label { font-size: .8rem; color: var(--muted); }
+  .squares { min-height: var(--sq); min-width: var(--sq); }
+  .total { font-weight: 700; font-size: .95rem; white-space: nowrap; transition: opacity .3s; }
+  .total.hidden { opacity: 0; }
+
+  .sq {
+    width: var(--sq); height: var(--sq); border-radius: var(--r);
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,.18);
+    opacity: 0; scale: .3;
+    transition: opacity .25s, scale .25s;
+  }
+  .stage.dense .sq { box-shadow: none; }
+  .sq.in { opacity: 1; scale: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sq, .total { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="distributive.html">Next: splitting a multiplication (distributive property) →</a></nav>
+  <h1>Multiplication is making equal groups</h1>
+  <p class="sub">Pick how many groups and how many squares go in each group (up to 100 each).</p>
+
+  <section class="controls" aria-label="Controls">
+    <div class="control">
+      <label for="groups">Number of groups</label>
+      <div class="row">
+        <input id="groups" type="range" min="0" max="100" value="3">
+        <input id="groupsNum" type="number" min="0" max="100" value="3" aria-label="Number of groups">
+      </div>
+    </div>
+    <div class="control">
+      <label for="size">Squares in each group</label>
+      <div class="row">
+        <input id="size" type="range" min="0" max="100" value="5">
+        <input id="sizeNum" type="number" min="0" max="100" value="5" aria-label="Squares in each group">
+      </div>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="play">Show me step by step</button>
+      <button id="swap" title="Swap the two numbers">Swap ⇄</button>
+      <span class="toggle" role="group" aria-label="View">
+        <button id="viewGroups" aria-pressed="true">Groups</button>
+        <button id="viewRows" aria-pressed="false">Rows</button>
+      </span>
+    </div>
+  </section>
+
+  <div class="equation" id="equation" aria-live="polite"></div>
+  <p class="say" id="say" aria-live="polite"></p>
+  <section class="stage" id="stage" aria-label="Picture of the multiplication"></section>
+</main>
+
+<script>
+const COLORS = ['#e4572e', '#2f6fde', '#29a35a', '#f2a541', '#8e5cd9',
+                '#17a2b8', '#d94f8c', '#7a8c2e', '#c97b3a', '#4b5bab'];
+const MAX = 100;            // largest number allowed for either factor
+const SQUARE_DELAY = 90;    // ms between squares when animating small groups
+const GROUP_PAUSE = 450;    // ms pause after each group
+const MAX_ANIMATION = 12000; // ms; big problems are sped up to fit
+const MAX_SLIDE = 3000;     // squares; above this, switching views snaps instead of sliding
+const MOVE_MS = 650;        // ms for the groups <-> rows rearrangement
+
+const $ = id => document.getElementById(id);
+const num = n => n.toLocaleString('en-US');
+const state = { groups: 3, size: 5, view: 'groups', shown: 0, squares: [], totals: [], timers: [], note: '' };
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function clearTimers() {
+  state.timers.forEach(clearTimeout);
+  state.timers = [];
+}
+
+function later(ms, fn) {
+  state.timers.push(setTimeout(fn, ms));
+}
+
+// Pick square size and spacing so the whole picture fits.
+function sizing() {
+  const { groups: a, size: b, view } = state;
+  const narrow = innerWidth < 520;
+  let sq, gap;
+  if (view === 'rows') {
+    gap = b <= 15 ? 4 : b <= 40 ? 2 : 1;
+    const ten = b > 10 ? Math.max(3, gap * 2) : 0;
+    const labelW = narrow ? 52 : 68, totalW = 96;
+    const avail = $('stage').clientWidth - labelW - totalW - 24;
+    const fit = Math.floor((avail - (b - 1) * gap - Math.floor((b - 1) / 10) * ten) / Math.max(b, 1));
+    // Also keep many rows from making the page very tall.
+    const tall = Math.floor(1600 / Math.max(a, 1)) - gap;
+    sq = Math.max(3, Math.min(narrow ? 20 : 28, fit, tall));
+  } else {
+    const n = a * b;
+    sq = n <= 60 ? 28 : n <= 200 ? 20 : n <= 600 ? 14 : n <= 2000 ? 9 : 6;
+    if (narrow) sq = Math.min(sq, 20);
+    gap = sq >= 14 ? 4 : sq >= 9 ? 2 : 1;
+  }
+  return {
+    sq, gap,
+    ten: Math.max(3, gap * 2),
+    r: sq >= 20 ? 5 : sq >= 12 ? 3 : sq >= 8 ? 2 : 1,
+    sparse: view === 'rows' && sq + gap < 18 && a > 10,
+  };
+}
+
+// Create one square element per object. They persist across view changes so they can slide.
+function build() {
+  clearTimers();
+  state.squares = [];
+  for (let g = 0; g < state.groups; g++) {
+    const group = [];
+    for (let i = 0; i < state.size; i++) {
+      const s = el('div', 'sq');
+      s.style.background = COLORS[g % COLORS.length];
+      s.title = `Group ${g + 1}, square ${i + 1}`;
+      group.push(s);
+    }
+    state.squares.push(group);
+  }
+  layout();
+}
+
+// Put the existing squares into containers for the current view.
+function layout() {
+  const stage = $('stage');
+  const { groups: a, size: b } = state;
+  const rows = state.view === 'rows';
+  stage.replaceChildren();
+  stage.className = 'stage ' + state.view;
+  state.totals = [];
+
+  if (a === 0) {
+    stage.append(el('div', 'empty', 'No groups at all, so there is nothing to count.'));
+    return;
+  }
+  const s = sizing();
+  stage.style.setProperty('--sq', s.sq + 'px');
+  stage.style.setProperty('--gap', s.gap + 'px');
+  stage.style.setProperty('--ten', s.ten + 'px');
+  stage.style.setProperty('--r', s.r + 'px');
+  stage.classList.toggle('dense', s.sq < 14);
+  stage.classList.toggle('sparse', s.sparse);
+
+  // Groups view: up to 10 squares are laid out in rows of 5; bigger groups in rows of 10.
+  const cols = b <= 10 ? Math.max(1, Math.min(b, 5)) : 10;
+  for (let g = 0; g < a; g++) {
+    const last = g === a - 1;
+    const box = el('div', rows ? 'grow' : 'group');
+    const squares = el('div', 'squares');
+    if (rows) {
+      squares.classList.toggle('tens', b > 10);
+      if (a > 10 && (g + 1) % 10 === 0 && !last) box.classList.add('ten-end');
+    } else {
+      squares.style.gridTemplateColumns = `repeat(${cols}, var(--sq))`;
+    }
+    squares.append(...state.squares[g]);
+
+    const labelled = !s.sparse || g === 0 || (g + 1) % 10 === 0 || last;
+    const running = num((g + 1) * b);
+    const total = el('div', 'total', !labelled ? '' : rows ? `${running}${last ? ' in all' : ''}`
+                                                           : `${running} ${last ? 'in all' : 'so far'}`);
+    total.title = 'Running total';
+    box.append(el('div', 'label', labelled ? `Group ${g + 1}` : ''), squares, total);
+    stage.append(box);
+    state.totals.push(total);
+  }
+}
+
+// "5 + 5 + 5", shortened to "5 + 5 + 5 + … + 5 (40 times)" when long.
+function sumText(n, b) {
+  if (n <= 8) return Array(n).fill(num(b)).join(' + ');
+  return `${num(b)} + ${num(b)} + ${num(b)} + … + ${num(b)} <small>(${n} times)</small>`;
+}
+
+function update() {
+  const { groups: a, size: b, shown } = state;
+  state.totals.forEach((t, g) => t.classList.toggle('hidden', g >= shown));
+
+  let eq = `${a} × ${b}`;
+  if (a === 0) {
+    eq += ' = 0';
+  } else {
+    if (shown > 0) eq += ` = <span class="sum">${sumText(shown, b)}</span>`;
+    if (shown === a) eq += ` = ${num(a * b)}`;
+  }
+  $('equation').innerHTML = eq;
+
+  let say;
+  if (state.note) say = state.note;
+  else if (a === 0) say = 'Zero groups means nothing to count, so the answer is 0.';
+  else if (shown === 0) say = `Watch: we'll make ${a} group${a > 1 ? 's' : ''} with ${b} square${b === 1 ? '' : 's'} in each.`;
+  else if (shown < a) say = `Group ${shown}: ${b} more makes ${num(shown * b)}.`;
+  else if (b === 0) say = `${a} empty groups still have nothing in them, so the answer is 0.`;
+  else {
+    say = `${a} group${a > 1 ? 's' : ''} of ${b} make${a > 1 ? '' : 's'} ${num(a * b)} squares` +
+          (state.view === 'rows' ? ` (the same as ${a} row${a > 1 ? 's' : ''} of ${b}).` : '.');
+    if (b > 10) say += state.view === 'rows'
+      ? ' Small gaps mark every 10 squares to make counting easier.'
+      : ' Each group is laid out in rows of 10 to make counting easier.';
+  }
+  $('say').textContent = say;
+}
+
+function showAll() {
+  clearTimers();
+  state.squares.flat().forEach(s => s.classList.add('in'));
+  state.shown = state.groups;
+  update();
+}
+
+function animate() {
+  clearTimers();
+  state.note = '';
+  state.squares.flat().forEach(s => s.classList.remove('in'));
+  state.shown = 0;
+  update();
+
+  const { groups: a, size: b } = state;
+  // Small groups appear one square at a time; big groups one row of 10 at a time.
+  const chunk = b > 20 ? 10 : 1;
+  const steps = Math.ceil(b / chunk);
+  let stepMs = chunk === 1 ? SQUARE_DELAY : SQUARE_DELAY * 3;
+  let pause = GROUP_PAUSE;
+  if (a * (steps * stepMs + pause) > MAX_ANIMATION) {
+    const perGroup = MAX_ANIMATION / a;
+    pause = perGroup * 0.3;
+    stepMs = steps ? perGroup * 0.7 / steps : 0;
+  }
+
+  let t = 400;
+  for (let g = 0; g < a; g++) {
+    for (let k = 0; k < steps; k++) {
+      later(t + k * stepMs, () => {
+        state.squares[g].slice(k * chunk, (k + 1) * chunk).forEach(s => s.classList.add('in'));
+      });
+    }
+    t += steps * stepMs;
+    later(t, () => { state.shown = g + 1; update(); });
+    t += pause;
+  }
+}
+
+// Switch views and slide each square from its old spot to its new one (FLIP technique).
+function setView(view) {
+  if (view === state.view) return;
+  const all = state.squares.flat();
+  const slide = all.length <= MAX_SLIDE && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const before = slide ? all.map(s => s.getBoundingClientRect()) : [];
+  state.view = view;
+  $('viewGroups').setAttribute('aria-pressed', view === 'groups');
+  $('viewRows').setAttribute('aria-pressed', view === 'rows');
+  state.note = view === 'rows'
+    ? 'Each group becomes one row. Same squares, just lined up in a rectangle.'
+    : 'Each row goes back into its own group.';
+  layout();
+  update();
+  if (!slide) return;
+
+  all.forEach((s, i) => {
+    const after = s.getBoundingClientRect();
+    s.style.transition = 'none';
+    s.style.transform = `translate(${before[i].left - after.left}px, ${before[i].top - after.top}px)`;
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    all.forEach(s => {
+      s.style.transition = `transform ${MOVE_MS}ms ease, opacity .25s, scale .25s`;
+      s.style.transform = '';
+    });
+  }));
+}
+
+function clamp(v) {
+  v = Math.round(+v);
+  return Number.isFinite(v) ? Math.min(MAX, Math.max(0, v)) : 0;
+}
+
+function setNumbers(a, b) {
+  state.groups = clamp(a);
+  state.size = clamp(b);
+  $('groups').value = $('groupsNum').value = state.groups;
+  $('size').value = $('sizeNum').value = state.size;
+}
+
+// Rebuild at most once per frame while a slider is being dragged.
+let pending = false;
+function rebuildSoon() {
+  state.note = '';
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => { pending = false; build(); showAll(); });
+}
+
+$('groups').addEventListener('input', () => { setNumbers($('groups').value, state.size); rebuildSoon(); });
+$('size').addEventListener('input', () => { setNumbers(state.groups, $('size').value); rebuildSoon(); });
+// Number boxes: update while typing if the value is valid, and tidy up when leaving the box.
+for (const id of ['groupsNum', 'sizeNum']) {
+  $(id).addEventListener('input', e => {
+    if (e.target.value === '' || !e.target.checkValidity()) return;
+    const a = id === 'groupsNum' ? e.target.value : state.groups;
+    const b = id === 'sizeNum' ? e.target.value : state.size;
+    setNumbers(a, b);
+    rebuildSoon();
+  });
+  $(id).addEventListener('change', () => setNumbers(state.groups, state.size));
+}
+$('play').addEventListener('click', animate);
+$('viewGroups').addEventListener('click', () => setView('groups'));
+$('viewRows').addEventListener('click', () => setView('rows'));
+$('swap').addEventListener('click', () => {
+  const a = state.groups, b = state.size;
+  setNumbers(b, a);
+  build();
+  showAll();
+  state.note = a === b
+    ? `Swapping ${a} and ${b} gives the same problem.`
+    : `Swapped: ${b} groups of ${a} is also ${num(a * b)}. The order doesn't change the answer.`;
+  update();
+});
+// Rows view sizes squares to the window width, so re-layout when it changes.
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (state.view === 'rows') layout(), update(); }, 150);
+});
+
+setNumbers(3, 5);
+build();
+showAll();
+</script>
+</body>
+</html>
